@@ -3,7 +3,7 @@ import { getAuth, GoogleAuthProvider, FacebookAuthProvider } from "firebase/auth
 import { getDatabase } from "firebase/database";
 
 const firebaseConfig = {
-  apiKey: "AIzaSyAO7p_H3IjTZKygiQpHPg8fxJMyj--2oIM",
+  apiKey: "AIzaSyAO7p_H3IjTZKygiOpHPg8fxJMyj--2oIM",
   authDomain: "cyber-snake-587c1.firebaseapp.com",
   databaseURL: "https://cyber-snake-587c1-default-rtdb.firebaseio.com",
   projectId: "cyber-snake-587c1",
