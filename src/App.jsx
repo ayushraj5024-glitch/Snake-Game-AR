@@ -99,7 +99,7 @@ function useAudio(soundPack) {
         g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
         o.start();
         o.stop(ctx.currentTime + dur);
-      } catch (_) {}
+      } catch (e) {console.error(e);}
     },
     [soundPack, getCtx]
   );
