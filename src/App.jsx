@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
+  signInWithPopup,
   signInWithRedirect,
   getRedirectResult,
   signOut,
@@ -11,7 +12,6 @@ import "./App.css";
 
 const SIZE = 20;
 
-// ─── SNAKE SKINS ───────────────────────────────────────────────────────────
 const SNAKE_SKINS = [
   { id: "cyber",  name: "Cyber",  price: 0,   head: "#ffffff", body: "#00d4ff", glow: "rgba(0,212,255,0.9)",  unlocked: true },
   { id: "fire",   name: "Fire",   price: 150, head: "#fff700", body: "#ff6a00", glow: "rgba(255,106,0,0.9)",  unlocked: false },
@@ -20,7 +20,6 @@ const SNAKE_SKINS = [
   { id: "gold",   name: "Gold",   price: 500, head: "#ffffff", body: "#ffd700", glow: "rgba(255,215,0,0.9)",  unlocked: false },
 ];
 
-// ─── BACKGROUNDS ───────────────────────────────────────────────────────────
 const BACKGROUNDS = [
   { id: "cyber",  name: "Cyber",  price: 0,   color: "#030d18", grid: "rgba(0,212,255,0.06)",   unlocked: true },
   { id: "matrix", name: "Matrix", price: 100, color: "#001a00", grid: "rgba(0,255,70,0.07)",    unlocked: false },
@@ -29,7 +28,6 @@ const BACKGROUNDS = [
   { id: "arctic", name: "Arctic", price: 300, color: "#001828", grid: "rgba(150,220,255,0.07)", unlocked: false },
 ];
 
-// ─── SOUNDS ────────────────────────────────────────────────────────────────
 const SOUND_PACKS = [
   { id: "retro",  name: "Retro",  icon: "🎮" },
   { id: "cyber",  name: "Cyber",  icon: "⚡" },
@@ -37,7 +35,6 @@ const SOUND_PACKS = [
   { id: "silent", name: "Silent", icon: "🔇" },
 ];
 
-// ─── HELPERS ───────────────────────────────────────────────────────────────
 const randomFood = (snake) => {
   let food;
   do {
@@ -46,17 +43,17 @@ const randomFood = (snake) => {
   return food;
 };
 
-const COINS_KEY      = "csxp_coins";
-const SKINS_KEY      = "csxp_skins";
-const BGS_KEY        = "csxp_bgs";
+const COINS_KEY       = "csxp_coins";
+const SKINS_KEY       = "csxp_skins";
+const BGS_KEY         = "csxp_bgs";
 const ACTIVE_SKIN_KEY = "csxp_active_skin";
-const ACTIVE_BG_KEY  = "csxp_active_bg";
-const SOUND_KEY      = "csxp_sound";
+const ACTIVE_BG_KEY   = "csxp_active_bg";
+const SOUND_KEY       = "csxp_sound";
 
-const getCoins         = () => Number(localStorage.getItem(COINS_KEY)) || 0;
-const saveCoins        = (c) => localStorage.setItem(COINS_KEY, c);
-const getUnlockedSkins = () => { try { return JSON.parse(localStorage.getItem(SKINS_KEY)) || ["cyber"]; } catch { return ["cyber"]; } };
-const getUnlockedBgs   = () => { try { return JSON.parse(localStorage.getItem(BGS_KEY))   || ["cyber"]; } catch { return ["cyber"]; } };
+const getCoins          = () => Number(localStorage.getItem(COINS_KEY)) || 0;
+const saveCoins         = (c) => localStorage.setItem(COINS_KEY, c);
+const getUnlockedSkins  = () => { try { return JSON.parse(localStorage.getItem(SKINS_KEY)) || ["cyber"]; } catch { return ["cyber"]; } };
+const getUnlockedBgs    = () => { try { return JSON.parse(localStorage.getItem(BGS_KEY))   || ["cyber"]; } catch { return ["cyber"]; } };
 const saveUnlockedSkins = (s) => localStorage.setItem(SKINS_KEY, JSON.stringify(s));
 const saveUnlockedBgs   = (b) => localStorage.setItem(BGS_KEY,   JSON.stringify(b));
 const getActiveSkin     = () => localStorage.getItem(ACTIVE_SKIN_KEY) || "cyber";
@@ -65,8 +62,8 @@ const getActiveSoundPack = () => localStorage.getItem(SOUND_KEY)      || "cyber"
 
 const saveScoreFirebase = async (uid, name, photo, score) => {
   try {
-    const userRef = ref(db, `leaderboard/${uid}`);
-    const snap    = await get(userRef);
+    const userRef  = ref(db, `leaderboard/${uid}`);
+    const snap     = await get(userRef);
     const existing = snap.val();
     if (!existing || score > existing.score) {
       await set(userRef, { name, photo: photo || "", score, updatedAt: Date.now() });
@@ -74,7 +71,7 @@ const saveScoreFirebase = async (uid, name, photo, score) => {
   } catch (e) { console.error(e); }
 };
 
-// ─── AUDIO ENGINE ──────────────────────────────────────────────────────────
+// ─── AUDIO ─────────────────────────────────────────────────────────────────
 function useAudio(soundPack) {
   const ctxRef = useRef(null);
   const getCtx = useCallback(() => {
@@ -83,46 +80,41 @@ function useAudio(soundPack) {
     return ctxRef.current;
   }, []);
 
-  const playNote = useCallback(
-    (freq1, freq2, dur, type = "sine", vol = 0.3) => {
-      if (soundPack === "silent") return;
-      try {
-        const ctx = getCtx();
-        const o   = ctx.createOscillator();
-        const g   = ctx.createGain();
-        o.connect(g);
-        g.connect(ctx.destination);
-        o.type = type;
-        o.frequency.setValueAtTime(freq1, ctx.currentTime);
-        if (freq2) o.frequency.exponentialRampToValueAtTime(freq2, ctx.currentTime + dur);
-        g.gain.setValueAtTime(vol, ctx.currentTime);
-        g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
-        o.start();
-        o.stop(ctx.currentTime + dur);
-      } catch (e) {console.error(e);}
-    },
-    [soundPack, getCtx]
-  );
+  const playNote = useCallback((freq1, freq2, dur, type = "sine", vol = 0.3) => {
+    if (soundPack === "silent") return;
+    try {
+      const ctx = getCtx();
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.connect(g); g.connect(ctx.destination);
+      o.type = type;
+      o.frequency.setValueAtTime(freq1, ctx.currentTime);
+      if (freq2) o.frequency.exponentialRampToValueAtTime(freq2, ctx.currentTime + dur);
+      g.gain.setValueAtTime(vol, ctx.currentTime);
+      g.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
+      o.start(); o.stop(ctx.currentTime + dur);
+    } catch (e) { console.error(e); }
+  }, [soundPack, getCtx]);
 
   const playEat  = useCallback(() => {
-    if (soundPack === "retro")  playNote(220, 440, 0.1,  "square",   0.2);
+    if (soundPack === "retro")       playNote(220, 440, 0.1,  "square",   0.2);
     else if (soundPack === "cyber")  playNote(440, 880, 0.12, "sine",     0.3);
     else if (soundPack === "nature") playNote(660, 990, 0.15, "sine",     0.2);
   }, [soundPack, playNote]);
 
   const playDie  = useCallback(() => {
-    if (soundPack === "retro")  playNote(300, 50, 0.5,  "square",   0.3);
+    if (soundPack === "retro")       playNote(300, 50, 0.5,  "square",   0.3);
     else if (soundPack === "cyber")  playNote(300, 50, 0.45, "sawtooth", 0.4);
     else if (soundPack === "nature") playNote(200, 80, 0.6,  "triangle", 0.3);
   }, [soundPack, playNote]);
 
   const playMove = useCallback(() => {
-    if (soundPack === "retro")  playNote(110, null, 0.03, "square", 0.03);
+    if (soundPack === "retro")       playNote(110, null, 0.03, "square", 0.03);
     else if (soundPack === "cyber")  playNote(110, null, 0.04, "sine",   0.04);
     else if (soundPack === "nature") playNote(180, null, 0.03, "sine",   0.02);
   }, [soundPack, playNote]);
 
-  const playBuy  = useCallback(() => { playNote(523, 1046, 0.2, "sine", 0.3); }, [playNote]);
+  const playBuy = useCallback(() => { playNote(523, 1046, 0.2, "sine", 0.3); }, [playNote]);
 
   return { playEat, playDie, playMove, playBuy };
 }
@@ -145,16 +137,16 @@ function LoginScreen({ onGoogle, onFacebook, loading, error }) {
           <div className="login-btns">
             <button className="login-btn google-btn" onClick={onGoogle}>
               <svg width="18" height="18" viewBox="0 0 48 48" style={{ marginRight: 10, flexShrink: 0 }}>
-                <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z" />
-                <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z" />
-                <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z" />
-                <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.29-8.16 2.29-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z" />
+                <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5z"/>
+                <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.26 5.48-4.78 7.18l7.73 6c4.51-4.18 7.09-10.36 7.09-17.65z"/>
+                <path fill="#FBBC05" d="M10.53 28.59c-.48-1.45-.76-2.99-.76-4.59s.27-3.14.76-4.59l-7.98-6.19C.92 16.46 0 20.12 0 24c0 3.88.92 7.54 2.56 10.78l7.97-6.19z"/>
+                <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.89-5.81l-7.73-6c-2.18 1.48-4.97 2.29-8.16 2.29-6.26 0-11.57-4.22-13.47-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48z"/>
               </svg>
               Continue with Google
             </button>
             <button className="login-btn facebook-btn" onClick={onFacebook}>
               <svg width="18" height="18" viewBox="0 0 24 24" fill="#fff" style={{ marginRight: 10, flexShrink: 0 }}>
-                <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z" />
+                <path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>
               </svg>
               Continue with Facebook
             </button>
@@ -190,62 +182,60 @@ function StoreModal({ coins, onClose, onBuy, activeSkin, activeBg, onSetSkin, on
           <button className={tab === "bg"    ? "active" : ""} onClick={() => setTab("bg")}>🖼 Boards</button>
         </div>
         <div className="modal-body">
-          {tab === "skins" &&
-            SNAKE_SKINS.map((skin) => {
-              const owned    = unlockedSkins.includes(skin.id);
-              const isActive = activeSkin === skin.id;
-              return (
-                <div key={skin.id} className={`store-item${isActive ? " active-item" : ""}`}>
-                  <div className="store-skin-preview">
-                    <div style={{ background: skin.head, width: 14, height: 14, borderRadius: 3, boxShadow: `0 0 8px ${skin.glow}` }} />
-                    <div style={{ background: skin.body, width: 12, height: 12, borderRadius: 2, boxShadow: `0 0 6px ${skin.glow}`, opacity: 0.85 }} />
-                    <div style={{ background: skin.body, width: 12, height: 12, borderRadius: 2, boxShadow: `0 0 6px ${skin.glow}`, opacity: 0.7  }} />
-                  </div>
-                  <div className="store-info">
-                    <span className="store-name">{skin.name}</span>
-                    {isActive && <span className="store-badge">ACTIVE</span>}
-                  </div>
-                  <div className="store-action">
-                    {owned ? (
-                      <button className={`btn-equip${isActive ? " equipped" : ""}`} onClick={() => onSetSkin(skin.id)}>
-                        {isActive ? "✓ ON" : "USE"}
-                      </button>
-                    ) : (
-                      <button className="btn-buy" onClick={() => onBuy("skin", skin.id, skin.price)} disabled={coins < skin.price}>
-                        🪙 {skin.price}
-                      </button>
-                    )}
-                  </div>
+          {tab === "skins" && SNAKE_SKINS.map((skin) => {
+            const owned    = unlockedSkins.includes(skin.id);
+            const isActive = activeSkin === skin.id;
+            return (
+              <div key={skin.id} className={`store-item${isActive ? " active-item" : ""}`}>
+                <div className="store-skin-preview">
+                  <div style={{ background: skin.head, width: 14, height: 14, borderRadius: 3, boxShadow: `0 0 8px ${skin.glow}` }} />
+                  <div style={{ background: skin.body, width: 12, height: 12, borderRadius: 2, boxShadow: `0 0 6px ${skin.glow}`, opacity: 0.85 }} />
+                  <div style={{ background: skin.body, width: 12, height: 12, borderRadius: 2, boxShadow: `0 0 6px ${skin.glow}`, opacity: 0.7  }} />
                 </div>
-              );
-            })}
-          {tab === "bg" &&
-            BACKGROUNDS.map((bg) => {
-              const owned    = unlockedBgs.includes(bg.id);
-              const isActive = activeBg === bg.id;
-              return (
-                <div key={bg.id} className={`store-item${isActive ? " active-item" : ""}`}>
-                  <div className="store-bg-preview" style={{ background: bg.color, border: `2px solid ${bg.grid.replace(/0\.\d+\)/, "0.8)")}` }}>
-                    <div className="store-bg-grid" style={{ backgroundImage: `linear-gradient(${bg.grid} 1px, transparent 1px),linear-gradient(90deg,${bg.grid} 1px, transparent 1px)`, backgroundSize: "20% 20%", width: "100%", height: "100%" }} />
-                  </div>
-                  <div className="store-info">
-                    <span className="store-name">{bg.name}</span>
-                    {isActive && <span className="store-badge">ACTIVE</span>}
-                  </div>
-                  <div className="store-action">
-                    {owned ? (
-                      <button className={`btn-equip${isActive ? " equipped" : ""}`} onClick={() => onSetBg(bg.id)}>
-                        {isActive ? "✓ ON" : "USE"}
-                      </button>
-                    ) : (
-                      <button className="btn-buy" onClick={() => onBuy("bg", bg.id, bg.price)} disabled={coins < bg.price}>
-                        🪙 {bg.price}
-                      </button>
-                    )}
-                  </div>
+                <div className="store-info">
+                  <span className="store-name">{skin.name}</span>
+                  {isActive && <span className="store-badge">ACTIVE</span>}
                 </div>
-              );
-            })}
+                <div className="store-action">
+                  {owned ? (
+                    <button className={`btn-equip${isActive ? " equipped" : ""}`} onClick={() => onSetSkin(skin.id)}>
+                      {isActive ? "✓ ON" : "USE"}
+                    </button>
+                  ) : (
+                    <button className="btn-buy" onClick={() => onBuy("skin", skin.id, skin.price)} disabled={coins < skin.price}>
+                      🪙 {skin.price}
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+          {tab === "bg" && BACKGROUNDS.map((bg) => {
+            const owned    = unlockedBgs.includes(bg.id);
+            const isActive = activeBg === bg.id;
+            return (
+              <div key={bg.id} className={`store-item${isActive ? " active-item" : ""}`}>
+                <div className="store-bg-preview" style={{ background: bg.color, border: `2px solid ${bg.grid.replace(/0\.\d+\)/, "0.8)")}` }}>
+                  <div className="store-bg-grid" style={{ backgroundImage: `linear-gradient(${bg.grid} 1px, transparent 1px),linear-gradient(90deg,${bg.grid} 1px, transparent 1px)`, backgroundSize: "20% 20%", width: "100%", height: "100%" }} />
+                </div>
+                <div className="store-info">
+                  <span className="store-name">{bg.name}</span>
+                  {isActive && <span className="store-badge">ACTIVE</span>}
+                </div>
+                <div className="store-action">
+                  {owned ? (
+                    <button className={`btn-equip${isActive ? " equipped" : ""}`} onClick={() => onSetBg(bg.id)}>
+                      {isActive ? "✓ ON" : "USE"}
+                    </button>
+                  ) : (
+                    <button className="btn-buy" onClick={() => onBuy("bg", bg.id, bg.price)} disabled={coins < bg.price}>
+                      🪙 {bg.price}
+                    </button>
+                  )}
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
     </div>
@@ -294,7 +284,7 @@ function SettingsModal({ soundPack, onSoundChange, onClose }) {
   );
 }
 
-// ─── LEADERBOARD PANEL ─────────────────────────────────────────────────────
+// ─── LEADERBOARD ───────────────────────────────────────────────────────────
 function LeaderboardPanel({ currentUid }) {
   const [lb, setLb] = useState([]);
   useEffect(() => {
@@ -346,13 +336,11 @@ function LeaderboardPanel({ currentUid }) {
 
 // ─── MAIN APP ──────────────────────────────────────────────────────────────
 export default function App() {
-  // Auth
   const [user,         setUser]         = useState(null);
   const [authLoading,  setAuthLoading]  = useState(true);
   const [loginLoading, setLoginLoading] = useState(false);
   const [loginError,   setLoginError]   = useState("");
 
-  // Game state
   const [snake,     setSnake]     = useState([{ x: 10, y: 10 }, { x: 9, y: 10 }]);
   const [food,      setFood]      = useState(randomFood([]));
   const [direction, setDirection] = useState("RIGHT");
@@ -363,12 +351,10 @@ export default function App() {
   const [started,   setStarted]   = useState(false);
   const [highScore, setHighScore] = useState(0);
 
-  // Coins & shop
   const [coins,      setCoins]      = useState(getCoins);
   const [activeSkin, setActiveSkin] = useState(getActiveSkin);
   const [activeBg,   setActiveBg]   = useState(getActiveBg);
 
-  // UI
   const [view,         setView]         = useState("game");
   const [showStore,    setShowStore]    = useState(false);
   const [showSettings, setShowSettings] = useState(false);
@@ -385,13 +371,12 @@ export default function App() {
   useEffect(() => { highScoreRef.current = highScore; }, [highScore]);
 
   const { playEat, playDie, playMove, playBuy } = useAudio(soundPack);
-
   const skin = SNAKE_SKINS.find((s) => s.id === activeSkin) || SNAKE_SKINS[0];
-  const bg   = BACKGROUNDS.find((b)  => b.id === activeBg)  || BACKGROUNDS[0];
+  const bg   = BACKGROUNDS.find((b) => b.id === activeBg)   || BACKGROUNDS[0];
 
-  // ── AUTH LISTENER + REDIRECT RESULT ──────────────────────────────────────
+  // ── AUTH ──────────────────────────────────────────────────────────────
   useEffect(() => {
-    // Handle redirect result first (for WebView / APK)
+    // WebView/APK ke liye redirect result pehle check karo
     getRedirectResult(auth)
       .then(async (result) => {
         if (result?.user) {
@@ -399,14 +384,14 @@ export default function App() {
           const snap = await get(ref(db, `leaderboard/${result.user.uid}`));
           const data = snap.val();
           if (data) setHighScore(data.score);
+          setLoginLoading(false);
         }
       })
       .catch((err) => {
-        console.error("Redirect result error:", err);
-        setLoginError("Login failed. Please try again.");
+        console.error("Redirect error:", err);
+        setLoginLoading(false);
       });
 
-    // Persistent auth state listener
     const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
       if (firebaseUser) {
         setUser(firebaseUser);
@@ -432,7 +417,6 @@ export default function App() {
     return () => window.removeEventListener("resize", updateCell);
   }, []);
 
-  // Prevent page scroll on swipe over board
   useEffect(() => {
     const board = boardRef.current;
     if (!board) return;
@@ -444,7 +428,6 @@ export default function App() {
   const directionRef = useRef(direction);
   useEffect(() => { directionRef.current = direction; }, [direction]);
 
-  // Keyboard
   useEffect(() => {
     const handleKey = (e) => {
       if (e.key === "ArrowUp"    && directionRef.current !== "DOWN")  setDirection("UP");
@@ -457,7 +440,6 @@ export default function App() {
     return () => window.removeEventListener("keydown", handleKey);
   }, []);
 
-  // Swipe
   const touchStartRef = useRef(null);
   useEffect(() => {
     const board = boardRef.current;
@@ -488,7 +470,6 @@ export default function App() {
     };
   }, []);
 
-  // Game over
   const handleGameOver = useCallback(() => {
     playDie();
     setGameOver(true);
@@ -500,7 +481,6 @@ export default function App() {
     }
   }, [playDie]);
 
-  // Game loop
   useEffect(() => {
     if (gameOver || paused || !started) return;
     const interval = setInterval(() => {
@@ -552,22 +532,30 @@ export default function App() {
     if (type === "skin") {
       const s = [...getUnlockedSkins(), id]; saveUnlockedSkins(s); handleSetSkin(id);
     } else {
-      const b = [...getUnlockedBgs(), id];   saveUnlockedBgs(b);   handleSetBg(id);
+      const b = [...getUnlockedBgs(), id]; saveUnlockedBgs(b); handleSetBg(id);
     }
     playBuy();
   };
 
-  // ── LOGIN HANDLERS — now use signInWithRedirect ──────────────────────────
+  // ── LOGIN: Popup pehle, WebView mein fail hone par Redirect ──────────
   const handleGoogle = async () => {
     setLoginLoading(true);
     setLoginError("");
     try {
-      await signInWithRedirect(auth, googleProvider);
-      // Page will redirect; loading spinner stays visible until return
+      const result = await signInWithPopup(auth, googleProvider);
+      if (result?.user) {
+        setUser(result.user);
+        setLoginLoading(false);
+      }
     } catch (err) {
-      console.error(err);
-      setLoginError("Google login failed. Try again.");
-      setLoginLoading(false);
+      console.error("Popup failed:", err.code);
+      try {
+        await signInWithRedirect(auth, googleProvider);
+      } catch (err2) {
+        console.error("Redirect failed:", err2);
+        setLoginError("Google login failed. Please try again.");
+        setLoginLoading(false);
+      }
     }
   };
 
@@ -575,11 +563,20 @@ export default function App() {
     setLoginLoading(true);
     setLoginError("");
     try {
-      await signInWithRedirect(auth, facebookProvider);
+      const result = await signInWithPopup(auth, facebookProvider);
+      if (result?.user) {
+        setUser(result.user);
+        setLoginLoading(false);
+      }
     } catch (err) {
-      console.error(err);
-      setLoginError("Facebook login failed. Try again.");
-      setLoginLoading(false);
+      console.error("Popup failed:", err.code);
+      try {
+        await signInWithRedirect(auth, facebookProvider);
+      } catch (err2) {
+        console.error("Redirect failed:", err2);
+        setLoginError("Facebook login failed. Please try again.");
+        setLoginLoading(false);
+      }
     }
   };
 
@@ -593,7 +590,6 @@ export default function App() {
   const displayName  = user?.displayName || "Player";
   const isNewRecord  = gameOver && score > 0 && score >= highScore;
 
-  // ── RENDER ────────────────────────────────────────────────────────────────
   if (authLoading) return (
     <div className="login-screen">
       <div className="loading-full">
@@ -616,21 +612,13 @@ export default function App() {
     <>
       {showStore && (
         <StoreModal
-          coins={coins}
-          onClose={() => setShowStore(false)}
-          onBuy={handleBuy}
-          activeSkin={activeSkin}
-          activeBg={activeBg}
-          onSetSkin={handleSetSkin}
-          onSetBg={handleSetBg}
+          coins={coins} onClose={() => setShowStore(false)} onBuy={handleBuy}
+          activeSkin={activeSkin} activeBg={activeBg}
+          onSetSkin={handleSetSkin} onSetBg={handleSetBg}
         />
       )}
       {showSettings && (
-        <SettingsModal
-          soundPack={soundPack}
-          onSoundChange={handleSoundChange}
-          onClose={() => setShowSettings(false)}
-        />
+        <SettingsModal soundPack={soundPack} onSoundChange={handleSoundChange} onClose={() => setShowSettings(false)} />
       )}
 
       <div className="container">
@@ -638,7 +626,6 @@ export default function App() {
           <span className="bolt">⚡</span>CYBER SNAKE X PRO<span className="bolt">⚡</span>
         </h1>
 
-        {/* PLAYER BAR */}
         <div className="player-bar">
           <div className="player-info">
             {user.photoURL ? (
@@ -652,8 +639,8 @@ export default function App() {
             </div>
           </div>
           <div className="player-bar-actions">
-            <button className="icon-btn" title="Store"        onClick={() => setShowStore(true)}>🏪</button>
-            <button className="icon-btn" title="Settings"     onClick={() => setShowSettings(true)}>⚙️</button>
+            <button className="icon-btn" title="Store"       onClick={() => setShowStore(true)}>🏪</button>
+            <button className="icon-btn" title="Settings"    onClick={() => setShowSettings(true)}>⚙️</button>
             <button className="icon-btn lb-btn" title="Leaderboard" onClick={() => setView((v) => v === "game" ? "leaderboard" : "game")}>
               {view === "leaderboard" ? "🎮" : "🌍"}
             </button>
@@ -665,7 +652,6 @@ export default function App() {
           <LeaderboardPanel currentUid={user.uid} />
         ) : (
           <>
-            {/* STATS */}
             <div className="stats">
               <div className="stat-item">
                 <span className="stat-icon">🏆</span>
@@ -692,13 +678,11 @@ export default function App() {
               </div>
             </div>
 
-            {/* BOARD */}
             <div className="board-wrapper">
               <div className="board-corner tl" /><div className="board-corner tr" />
               <div className="board-corner bl" /><div className="board-corner br" />
               <div
-                className="board"
-                ref={boardRef}
+                className="board" ref={boardRef}
                 style={{
                   background: bg.color,
                   backgroundImage: `linear-gradient(${bg.grid} 1px, transparent 1px), linear-gradient(90deg, ${bg.grid} 1px, transparent 1px)`,
@@ -706,12 +690,10 @@ export default function App() {
                 }}
               >
                 {snake.map((seg, i) => (
-                  <div
-                    key={i}
-                    className={`snake${i === 0 ? " head" : ""}`}
+                  <div key={i} className={`snake${i === 0 ? " head" : ""}`}
                     style={{
                       left: seg.x * cellSize, top: seg.y * cellSize,
-                      width: cellSize - 1,    height: cellSize - 1,
+                      width: cellSize - 1, height: cellSize - 1,
                       background: i === 0 ? skin.head : skin.body,
                       boxShadow: i === 0
                         ? `0 0 10px ${skin.glow}, 0 0 20px ${skin.glow.replace("0.9", "0.4")}`
@@ -719,15 +701,11 @@ export default function App() {
                     }}
                   />
                 ))}
-                <div
-                  className="food"
-                  style={{
-                    left:   food.x * cellSize + cellSize * 0.1,
-                    top:    food.y * cellSize + cellSize * 0.1,
-                    width:  cellSize * 0.8,
-                    height: cellSize * 0.8,
-                  }}
-                />
+                <div className="food" style={{
+                  left: food.x * cellSize + cellSize * 0.1,
+                  top:  food.y * cellSize + cellSize * 0.1,
+                  width: cellSize * 0.8, height: cellSize * 0.8,
+                }} />
 
                 {!started && !gameOver && (
                   <div className="overlay">
@@ -756,7 +734,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* CONTROLS */}
             <div className="controls">
               <button onClick={restartGame}><span className="btn-icon">▶</span> START</button>
               <button onClick={() => setPaused((p) => !p)} disabled={!started || gameOver}>
@@ -764,7 +741,6 @@ export default function App() {
               </button>
             </div>
 
-            {/* D-PAD */}
             <div className="dpad">
               <button className="dpad-btn dpad-up"    onClick={() => setDirection((d) => d !== "DOWN"  ? "UP"    : d)}>▲</button>
               <div className="dpad-middle">
